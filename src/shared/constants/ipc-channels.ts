@@ -1,0 +1,23 @@
+// IPC Channel constants
+export const IPC_CHANNELS = {
+  // Settings
+  GET_SETTINGS: 'GET_SETTINGS',
+  SAVE_SETTINGS: 'SAVE_SETTINGS',
+  TEST_CONNECTION: 'TEST_CONNECTION',
+
+  // File upload
+  UPLOAD_PROTOCOL_FILE: 'UPLOAD_PROTOCOL_FILE',
+  UPLOAD_SUBJECT_FILE: 'UPLOAD_SUBJECT_FILE',
+
+  // AI extraction
+  EXTRACT_CRITERIA: 'EXTRACT_CRITERIA',
+  EXTRACT_SUBJECT_DATA: 'EXTRACT_SUBJECT_DATA',
+
+  // Eligibility
+  VERIFY_ELIGIBILITY: 'VERIFY_ELIGIBILITY',
+
+  // Progress events (main → renderer)
+  PROCESSING_PROGRESS: 'PROCESSING_PROGRESS',
+} as const;
+
+export type IpcChannel = typeof IPC_CHANNELS[keyof typeof IPC_CHANNELS];

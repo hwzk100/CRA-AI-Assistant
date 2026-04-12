@@ -1,0 +1,20 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git:*)",
+      "mcp__zread__search_doc",
+      "mcp__web-search-prime__web_search_prime",
+      "mcp__web-reader__webReader",
+      "Bash(mkdir:*)",
+      "Bash(npm install:*)",
+      "Bash(npx webpack:*)",
+      "Bash(timeout 20 npm start:*)",
+      "Bash(taskkill:*)",
+      "Bash(npm start:*)",
+      "Bash(grep:*)",
+      "Bash(netstat:*)",
+      "Bash(curl:*)",
+      "Bash(tasklist:*)"
+    ]
+  }
+}
