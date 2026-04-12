@@ -24,7 +24,6 @@ export const FileZone: React.FC<FileZoneProps> = ({
   acceptedTypes,
 }) => {
   const [isDragging, setIsDragging] = useState(false);
-  const fileInputRef = React.useRef<HTMLInputElement>(null);
 
   // Subscribe to both file lists and select in render
   const protocolFiles = useStore((state) => state.protocolFiles);
@@ -56,28 +55,31 @@ export const FileZone: React.FC<FileZoneProps> = ({
     }
   };
 
-  // Handle file upload (add to list, no processing yet)
-  const handleFileUpload = async (file: File) => {
-    const fileId = `file_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-
+  // Handle file selection via native dialog
+  const handleFileDialog = async () => {
     try {
-      const fileInfo = {
-        id: fileId,
-        name: file.name,
-        path: (file as any).path || file.name,
-        size: file.size,
-        type: file.type.includes('pdf') ? FileType.PDF : FileType.IMAGE,
-        status: FileStatus.PENDING,
-        uploadedAt: new Date(),
-      };
+      const filePaths = await window.electronAPI.openFileDialog();
+      if (!filePaths || filePaths.length === 0) return;
 
-      addFile(zone, fileInfo);
-    } catch (error) {
-      console.error('Failed to add file:', error);
-    } finally {
-      if (fileInputRef.current) {
-        fileInputRef.current.value = '';
+      for (const fp of filePaths) {
+        const fileName = fp.split(/[\\/]/).pop() || fp;
+        const ext = fileName.toLowerCase().split('.').pop() || '';
+        const fileId = `file_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+
+        const fileInfo = {
+          id: fileId,
+          name: fileName,
+          path: fp,
+          size: 0, // unknown until processed
+          type: ext === 'pdf' ? FileType.PDF : FileType.IMAGE,
+          status: FileStatus.PENDING,
+          uploadedAt: new Date(),
+        };
+
+        addFile(zone, fileInfo);
       }
+    } catch (error) {
+      console.error('Failed to open file dialog:', error);
     }
   };
 
@@ -97,17 +99,23 @@ export const FileZone: React.FC<FileZoneProps> = ({
 
       if (zone === StorageZone.PROTOCOL) {
         // Step 1: Upload file
+        console.log('[FileZone] Uploading protocol file:', filePath);
         const uploadResult = await window.electronAPI.uploadProtocolFile(filePath);
         if (!uploadResult.success) {
+          console.error('[FileZone] Upload failed:', uploadResult.message);
           updateFileStatus(zone, fileId, FileStatus.FAILED, uploadResult.message || '上传失败');
           return false;
         }
+        console.log('[FileZone] Upload succeeded, file type:', uploadResult.fileType);
 
         // Step 2: Extract criteria
+        console.log('[FileZone] Extracting criteria...');
         const criteriaResult = await window.electronAPI.extractCriteria();
+        console.log('[FileZone] Criteria extraction result:', criteriaResult ? 'received' : 'null');
         if (criteriaResult && criteriaResult.criteria) {
           const { setInclusionCriteria, setExclusionCriteria, setVisitSchedule } = useStore.getState();
           const allCriteria = criteriaResult.criteria;
+          console.log('[FileZone] Criteria count:', allCriteria.length);
 
           // Split into inclusion and exclusion
           const inclusionData = allCriteria
@@ -155,17 +163,22 @@ export const FileZone: React.FC<FileZoneProps> = ({
       } else {
         // SUBJECT zone
         // Step 1: Upload file
+        console.log('[FileZone] Uploading subject file:', filePath);
         const uploadResult = await window.electronAPI.uploadSubjectFile(filePath);
         if (!uploadResult.success) {
+          console.error('[FileZone] Upload failed:', uploadResult.message);
           updateFileStatus(zone, fileId, FileStatus.FAILED, uploadResult.message || '上传失败');
           return false;
         }
+        console.log('[FileZone] Upload succeeded, file type:', uploadResult.fileType);
 
         // Step 2: Extract subject data
+        console.log('[FileZone] Extracting subject data...');
         const subjectResult = await window.electronAPI.extractSubjectData();
+        console.log('[FileZone] Subject extraction result:', subjectResult ? 'received' : 'null');
         if (subjectResult && subjectResult.subjectData) {
           const data = subjectResult.subjectData;
-          const { addSubjectDemographics, setMedications, addMedication } = useStore.getState();
+          const { addSubjectDemographics, setMedications } = useStore.getState();
 
           // Store demographics
           if (data.demographics) {
@@ -193,7 +206,6 @@ export const FileZone: React.FC<FileZoneProps> = ({
               createdAt: new Date(),
               updatedAt: new Date(),
             }));
-            // Use setMedications to replace all (since each subject file is fresh)
             setMedications([...useStore.getState().medications, ...medRecords]);
           }
 
@@ -201,6 +213,7 @@ export const FileZone: React.FC<FileZoneProps> = ({
           const { inclusionCriteria, exclusionCriteria } = useStore.getState();
           if (inclusionCriteria.length > 0 || exclusionCriteria.length > 0) {
             try {
+              console.log('[FileZone] Verifying eligibility...');
               const eligibilityResult = await window.electronAPI.verifyEligibility();
               if (eligibilityResult && eligibilityResult.report) {
                 const report = eligibilityResult.report;
@@ -211,7 +224,6 @@ export const FileZone: React.FC<FileZoneProps> = ({
 
                 report.results.forEach((r: any) => {
                   if (r.category === 'inclusion') {
-                    // Find matching inclusion criteria by content
                     const match = inclusionCriteria.find(c => c.description === r.criterionContent);
                     if (match) {
                       updateInclusionEligibility(
@@ -225,7 +237,7 @@ export const FileZone: React.FC<FileZoneProps> = ({
                     if (match) {
                       updateExclusionEligibility(
                         match.id,
-                        r.status === 'fail', // For exclusion, pass = not excluded = eligible
+                        r.status === 'fail',
                         r.evidence
                       );
                     }
@@ -233,17 +245,19 @@ export const FileZone: React.FC<FileZoneProps> = ({
                 });
               }
             } catch (eligError) {
-              console.error('Eligibility verification failed:', eligError);
+              console.error('[FileZone] Eligibility verification failed:', eligError);
             }
           }
         }
       }
 
+      console.log('[FileZone] File processing completed:', fileId);
       updateFileStatus(zone, fileId, FileStatus.COMPLETED);
       return true;
     } catch (error) {
-      console.error('Failed to process file:', error);
-      updateFileStatus(zone, fileId, FileStatus.FAILED, error instanceof Error ? error.message : '处理失败');
+      const errMsg = error instanceof Error ? error.message : String(error);
+      console.error('[FileZone] Failed to process file:', errMsg);
+      updateFileStatus(zone, fileId, FileStatus.FAILED, errMsg || '处理失败');
       return false;
     }
   };
@@ -296,18 +310,24 @@ export const FileZone: React.FC<FileZoneProps> = ({
 
     const droppedFiles = Array.from(e.dataTransfer.files);
     for (const file of droppedFiles) {
-      await handleFileUpload(file);
-    }
-  }, [zone]);
+      const filePath = (file as any).path;
+      if (!filePath) continue; // skip if no full path available
 
-  // Support multi-file selection
-  const handleFileSelect = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const selectedFiles = Array.from(e.target.files || []);
-    for (const file of selectedFiles) {
-      await handleFileUpload(file);
-    }
-    if (fileInputRef.current) {
-      fileInputRef.current.value = '';
+      const fileName = file.name;
+      const ext = fileName.toLowerCase().split('.').pop() || '';
+      const fileId = `file_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+
+      const fileInfo = {
+        id: fileId,
+        name: fileName,
+        path: filePath,
+        size: file.size,
+        type: ext === 'pdf' ? FileType.PDF : FileType.IMAGE,
+        status: FileStatus.PENDING,
+        uploadedAt: new Date(),
+      };
+
+      addFile(zone, fileInfo);
     }
   }, [zone]);
 
@@ -335,7 +355,21 @@ export const FileZone: React.FC<FileZoneProps> = ({
       for (let i = 0; i < filesToProcess.length; i++) {
         const progress = Math.round(((i) / filesToProcess.length) * 100);
         setProcessing(true, 'processing', progress);
-        await processSingleFile(filesToProcess[i]);
+
+        // Safety timeout: 5 minutes per file max
+        const timeoutMs = 5 * 60 * 1000;
+        const result = await Promise.race([
+          processSingleFile(filesToProcess[i]),
+          new Promise<false>((_, reject) =>
+            setTimeout(() => {
+              updateFileStatus(zone, filesToProcess[i].id, FileStatus.FAILED, '处理超时，请重试');
+              reject(new Error('timeout'));
+            }, timeoutMs)
+          ),
+        ]).catch((err) => {
+          if (err instanceof Error && err.message === 'timeout') return false as const;
+          throw err;
+        });
       }
     } finally {
       setProcessing(false, 'idle', 100);
@@ -352,6 +386,7 @@ export const FileZone: React.FC<FileZoneProps> = ({
         }}
         onDragLeave={() => setIsDragging(false)}
         onDrop={handleDrop}
+        onClick={handleFileDialog}
         className={`
           border-2 border-dashed rounded-lg p-3 text-center cursor-pointer
           transition-colors duration-200
@@ -361,23 +396,12 @@ export const FileZone: React.FC<FileZoneProps> = ({
           }
         `}
       >
-        <input
-          ref={fileInputRef}
-          type="file"
-          id={`file-input-${zone}`}
-          className="hidden"
-          onChange={handleFileSelect}
-          multiple
-          accept={acceptedTypes.map(t => t === FileType.PDF ? '.pdf' : '.jpg,.jpeg,.png,.bmp,.webp').join(',')}
-        />
-        <label htmlFor={`file-input-${zone}`} className="cursor-pointer">
-          <div className="text-2xl mb-1">{icon}</div>
-          <h3 className="text-sm font-semibold text-gray-700 mb-1">{title}</h3>
-          <p className="text-xs text-gray-500 mb-2">{description}</p>
-          <div className="inline-flex items-center px-3 py-1.5 bg-primary-500 text-white rounded-lg hover:bg-primary-600 transition-colors">
-            <span className="text-xs font-medium">选择文件</span>
-          </div>
-        </label>
+        <div className="text-2xl mb-1">{icon}</div>
+        <h3 className="text-sm font-semibold text-gray-700 mb-1">{title}</h3>
+        <p className="text-xs text-gray-500 mb-2">{description}</p>
+        <div className="inline-flex items-center px-3 py-1.5 bg-primary-500 text-white rounded-lg hover:bg-primary-600 transition-colors">
+          <span className="text-xs font-medium">选择文件</span>
+        </div>
       </div>
 
       {/* File List */}
@@ -436,9 +460,15 @@ export const FileZone: React.FC<FileZoneProps> = ({
                   <span className="text-xl flex-shrink-0">{getFileIcon(file.type)}</span>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium text-gray-700 truncate">{file.name}</p>
-                    <p className="text-xs text-gray-400">
-                      {(file.size / 1024 / 1024).toFixed(2)} MB
-                    </p>
+                    {file.errorMessage ? (
+                      <p className="text-xs text-red-500 truncate" title={file.errorMessage}>
+                        {file.errorMessage}
+                      </p>
+                    ) : (
+                      <p className="text-xs text-gray-400">
+                        {file.size > 0 ? `${(file.size / 1024 / 1024).toFixed(2)} MB` : ''}
+                      </p>
+                    )}
                   </div>
                 </div>
                 <div className="flex items-center space-x-2 flex-shrink-0">
@@ -448,9 +478,6 @@ export const FileZone: React.FC<FileZoneProps> = ({
                   <button
                     onClick={() => {
                       removeFile(zone, file.id);
-                      if (fileInputRef.current) {
-                        fileInputRef.current.value = '';
-                      }
                     }}
                     className="text-gray-400 hover:text-red-500 transition-colors p-1"
                     title="删除文件"
