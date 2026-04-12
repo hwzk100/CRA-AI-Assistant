@@ -2,6 +2,9 @@ import { app, BrowserWindow } from 'electron';
 import * as path from 'path';
 import { registerIpcHandlers } from './ipc-handlers';
 
+// Increase memory limit for large PDF processing
+app.commandLine.appendSwitch('js-flags', '--max-old-space-size=4096');
+
 let mainWindow: BrowserWindow | null = null;
 
 function createWindow(): void {

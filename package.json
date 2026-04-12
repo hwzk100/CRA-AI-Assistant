@@ -9,7 +9,7 @@
     "build:main": "webpack --config webpack.main.config.js --mode development",
     "build:renderer": "webpack --config webpack.renderer.config.js --mode development",
     "dev": "concurrently \"webpack --config webpack.main.config.js --mode development --watch\" \"webpack serve --config webpack.renderer.config.js --mode development\"",
-    "electron": "electron dist/main/index.js",
+    "electron": "electron --max-old-space-size=4096 dist/main/index.js",
     "clean": "rimraf dist"
   },
   "dependencies": {

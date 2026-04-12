@@ -7,6 +7,7 @@ interface Window {
     getSettings(): Promise<any>;
     saveSettings(settings: any): Promise<any>;
     testConnection(): Promise<any>;
+    openFileDialog(filters?: { name: string; extensions: string[] }[]): Promise<string[]>;
     uploadProtocolFile(filePath: string): Promise<any>;
     uploadSubjectFile(filePath: string): Promise<any>;
     extractCriteria(): Promise<any>;

@@ -6,6 +6,9 @@ const electronAPI = {
   saveSettings: (settings: Record<string, unknown>) => ipcRenderer.invoke('SAVE_SETTINGS', settings),
   testConnection: () => ipcRenderer.invoke('TEST_CONNECTION'),
 
+  // File dialog
+  openFileDialog: (filters?: { name: string; extensions: string[] }[]) => ipcRenderer.invoke('OPEN_FILE_DIALOG', filters),
+
   // File upload
   uploadProtocolFile: (filePath: string) => ipcRenderer.invoke('UPLOAD_PROTOCOL_FILE', filePath),
   uploadSubjectFile: (filePath: string) => ipcRenderer.invoke('UPLOAD_SUBJECT_FILE', filePath),

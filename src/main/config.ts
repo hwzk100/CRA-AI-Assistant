@@ -5,7 +5,20 @@ import { app, safeStorage } from 'electron';
 import { DEFAULT_CONFIG } from '../shared/types/config';
 import type { AppConfig } from '../shared/types/config';
 
-dotenv.config({ path: path.join(app.getAppPath(), '.env') });
+// Load .env from multiple possible locations
+const envPaths = [
+  path.join(process.cwd(), '.env'),                    // Running from project root
+  path.join(__dirname, '../../.env'),                   // Relative to dist/main/
+  path.join(app.getAppPath(), '.env'),                  // App package directory
+];
+
+for (const envPath of envPaths) {
+  const result = dotenv.config({ path: envPath });
+  if (!result.error) {
+    console.log(`[Config] Loaded .env from: ${envPath}`);
+    break;
+  }
+}
 
 const store = new Store({
   name: 'cra-ai-config',

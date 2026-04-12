@@ -14,7 +14,14 @@
       "Bash(grep:*)",
       "Bash(netstat:*)",
       "Bash(curl:*)",
-      "Bash(tasklist:*)"
+      "Bash(tasklist:*)",
+      "Bash(ls:*)",
+      "Bash(npm run:*)",
+      "Bash(npx electron:*)",
+      "Bash(npm ls:*)",
+      "Bash(while read pid)",
+      "Bash(do taskkill //PID $pid //F)",
+      "Bash(done)"
     ]
   }
 }

@@ -19,11 +19,13 @@ export function resetRouter(): void {
 
 export async function invokeGateway(request: GatewayRequest): Promise<GatewayResponse> {
   const activeRouter = getRouter();
-  const { adapter } = activeRouter.route(request);
+  const { adapter, model } = activeRouter.route(request);
 
   logger.info('Invoking gateway', {
+    model,
     contentType: request.contentType,
     hasImage: !!request.imageBase64,
+    promptLength: request.prompt?.length || 0,
   });
 
   try {
@@ -31,6 +33,7 @@ export async function invokeGateway(request: GatewayRequest): Promise<GatewayRes
     logger.info('Gateway response received', {
       model: response.model,
       tokens: response.usage.totalTokens,
+      contentLength: response.content?.length || 0,
     });
     return response;
   } catch (error: unknown) {
