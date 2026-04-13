@@ -4,6 +4,7 @@ import { ZhipuAdapter } from './adapters/zhipu-adapter';
 import { OpenAIAdapter } from './adapters/openai-adapter';
 import { getConfig } from '../../config';
 import type { AppConfig } from '../../../shared/types/config';
+import { MODEL_SPECS, DEFAULT_MODEL_SPEC } from '../../../shared/constants/models';
 import { createLogger } from '../../utils/logger';
 
 const logger = createLogger('SmartRouter');
@@ -55,5 +56,21 @@ export class SmartRouter {
     }
 
     return { adapter, model };
+  }
+
+  getChunkTokens(): number {
+    const config = getConfig();
+    const model = config.textModel;
+    const spec = MODEL_SPECS[model] ?? DEFAULT_MODEL_SPEC;
+    // Use 60% of context window, but cap at 6000 tokens to match original
+    // behavior and avoid rate-limit errors on strict API plans.
+    return Math.min(Math.floor(spec.contextWindow * 0.6), 6000);
+  }
+
+  getMaxImagesPerCall(): number {
+    const config = getConfig();
+    const model = config.visionModel;
+    const spec = MODEL_SPECS[model] ?? DEFAULT_MODEL_SPEC;
+    return spec.maxImagesPerCall;
   }
 }

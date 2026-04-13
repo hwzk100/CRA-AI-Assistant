@@ -1,5 +1,5 @@
-import { invokeGateway } from '../gateway/index';
-import { parsePdf, splitTextIntoChunks } from './pdf-parser';
+import { invokeGateway, getChunkTokens, getMaxImagesPerCall } from '../gateway/index';
+import { parsePdf, splitTextIntoChunks, clearPdfCache } from './pdf-parser';
 import { convertPdfToImages } from './pdf-to-image';
 import {
   SUBJECT_SYSTEM_PROMPT,
@@ -101,7 +101,10 @@ export async function extractSubjectFromTextPdf(
   onProgress?: (progress: number, message: string) => void
 ): Promise<SubjectData> {
   const parseResult = await parsePdf(filePath);
-  const chunks = splitTextIntoChunks(parseResult.text);
+  const chunkTokens = getChunkTokens();
+  const chunks = splitTextIntoChunks(parseResult.text, chunkTokens, Math.floor(chunkTokens * 0.1));
+
+  logger.info(`Using chunk size ${chunkTokens} tokens for subject extraction`);
 
   logger.info(`Processing ${chunks.length} chunks for subject data extraction`);
   onProgress?.(10, 'PDF文本已解析，开始分批提取受试者数据...');
@@ -122,6 +125,7 @@ export async function extractSubjectFromTextPdf(
   }
 
   onProgress?.(90, '受试者数据合并完成');
+  clearPdfCache(filePath);
   return mergeSubjectData(results);
 }
 
@@ -130,20 +134,27 @@ export async function extractSubjectFromScannedPdf(
   onProgress?: (progress: number, message: string) => void
 ): Promise<SubjectData> {
   const images = await convertPdfToImages(filePath);
+  const maxImages = getMaxImagesPerCall();
+
+  logger.info(`Converted ${images.length} pages to images, batching with max ${maxImages} per call`);
+
   onProgress?.(10, `已转换${images.length}页为图片，开始AI识别受试者数据...`);
 
   const results: SubjectData[] = [];
+  const totalBatches = Math.ceil(images.length / maxImages);
 
-  for (let i = 0; i < images.length; i++) {
-    const progress = 10 + Math.floor((i / images.length) * 80);
-    onProgress?.(progress, `正在识别第 ${i + 1}/${images.length} 页...`);
+  for (let batchIdx = 0; batchIdx < totalBatches; batchIdx++) {
+    const start = batchIdx * maxImages;
+    const batch = images.slice(start, start + maxImages);
+    const progress = 10 + Math.floor((batchIdx / totalBatches) * 80);
+    const batchEnd = Math.min(start + maxImages, images.length);
+    onProgress?.(progress, `正在识别第 ${start + 1}-${batchEnd}/${images.length} 页...`);
 
     const response = await invokeGateway({
       prompt: SUBJECT_EXTRACTION_FROM_IMAGE_PROMPT,
       systemPrompt: SUBJECT_SYSTEM_PROMPT,
       contentType: 'image',
-      imageBase64: images[i].base64,
-      imageMimeType: images[i].mimeType,
+      images: batch.map(img => ({ base64: img.base64, mimeType: img.mimeType })),
     });
 
     results.push(parseSubjectJson(response.content));

@@ -4,8 +4,12 @@ export interface GatewayRequest {
   prompt: string;
   systemPrompt?: string;
   contentType: ContentType;
-  imageBase64?: string; // base64 encoded image
-  imageMimeType?: string; // e.g., 'image/png'
+  imageBase64?: string; // base64 encoded image (single image compat)
+  imageMimeType?: string; // e.g., 'image/png' (single image compat)
+  images?: Array<{      // Multi-image batch
+    base64: string;
+    mimeType: string;
+  }>;
   temperature?: number;
   maxTokens?: number;
 }

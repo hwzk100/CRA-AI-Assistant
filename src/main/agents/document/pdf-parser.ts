@@ -15,7 +15,16 @@ export interface PdfParseResult {
 
 const TEXT_THRESHOLD = 50; // Minimum characters to consider as text-based PDF
 
+// Cache to avoid parsing the same PDF twice (detectFileType + extractor)
+const pdfCache = new Map<string, PdfParseResult>();
+
 export async function parsePdf(filePath: string): Promise<PdfParseResult> {
+  const cached = pdfCache.get(filePath);
+  if (cached) {
+    logger.info(`Using cached PDF result for: ${filePath}`);
+    return cached;
+  }
+
   const dataBuffer = fs.readFileSync(filePath);
 
   try {
@@ -25,15 +34,27 @@ export async function parsePdf(filePath: string): Promise<PdfParseResult> {
 
     logger.info(`PDF parsed: ${data.numpages} pages, text length: ${text.length}, isTextBased: ${isTextBased}`);
 
-    return {
+    const result: PdfParseResult = {
       text,
       pageCount: data.numpages,
       isTextBased,
     };
+
+    pdfCache.set(filePath, result);
+    return result;
   } catch (error) {
     logger.error('PDF parsing failed', { error: String(error) });
     throw new Error(`Failed to parse PDF: ${error instanceof Error ? error.message : String(error)}`);
   }
+}
+
+export function clearPdfCache(filePath?: string): void {
+  if (filePath) {
+    pdfCache.delete(filePath);
+  } else {
+    pdfCache.clear();
+  }
+  logger.info('PDF cache cleared');
 }
 
 export function splitTextIntoChunks(text: string, maxTokens: number = 2000, overlap: number = 500): string[] {
@@ -62,9 +83,10 @@ export function splitTextIntoChunks(text: string, maxTokens: number = 2000, over
     }
 
     chunks.push(text.slice(start, end));
-    start = end - overlapChars;
 
-    if (start >= text.length) break;
+    if (end >= text.length) break; // Reached end of text, stop
+
+    start = end - overlapChars;
   }
 
   logger.info(`Text split into ${chunks.length} chunks`);

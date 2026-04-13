@@ -10,7 +10,6 @@ export type DetectedFileType = 'text-pdf' | 'scanned-pdf' | 'image';
 export interface FileDetectionResult {
   fileType: DetectedFileType;
   mimeType: string;
-  text?: string;
   pageCount?: number;
 }
 
@@ -30,7 +29,6 @@ export async function detectFileType(filePath: string): Promise<FileDetectionRes
     return {
       fileType: result.isTextBased ? 'text-pdf' : 'scanned-pdf',
       mimeType,
-      text: result.text,
       pageCount: result.pageCount,
     };
   }

@@ -87,28 +87,36 @@ export class ZhipuAdapter extends BaseAdapter {
     systemPrompt?: string,
     options?: { temperature?: number; maxTokens?: number }
   ): Promise<GatewayResponse> {
+    return this.chatWithImages(
+      prompt,
+      [{ base64: imageBase64, mimeType: imageMimeType }],
+      systemPrompt,
+      options
+    );
+  }
+
+  async chatWithImages(
+    prompt: string,
+    images: Array<{ base64: string; mimeType: string }>,
+    systemPrompt?: string,
+    options?: { temperature?: number; maxTokens?: number }
+  ): Promise<GatewayResponse> {
     const messages: ChatMessage[] = [];
     if (systemPrompt) {
       messages.push({ role: 'system', content: systemPrompt });
     }
 
-    // Build multimodal content with data URI prefix (required by GLM-4V)
     const contentParts: ContentPart[] = [
-      {
-        type: 'image_url',
-        image_url: {
-          url: `data:${imageMimeType};base64,${imageBase64}`,
-        },
-      },
-      {
-        type: 'text',
-        text: prompt,
-      },
+      ...images.map(img => ({
+        type: 'image_url' as const,
+        image_url: { url: `data:${img.mimeType};base64,${img.base64}` },
+      })),
+      { type: 'text' as const, text: prompt },
     ];
 
     messages.push({ role: 'user', content: contentParts });
 
-    logger.info(`Sending image request to ${this.config.visionModel}`);
+    logger.info(`Sending multi-image request (${images.length} images) to ${this.config.visionModel}`);
 
     const response = await axios.post<ZhipuResponse>(
       this.config.apiEndpoint,
