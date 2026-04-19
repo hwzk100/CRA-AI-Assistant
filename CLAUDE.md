@@ -10,7 +10,7 @@ npm run build          # Production build both processes
 npm run build:main     # Dev build main process only
 npm run build:renderer # Dev build renderer only (starts dev server on :3000)
 npm run dev            # Watch mode for both (no Electron launch)
-npm run electron       # Launch Electron (run build:main first)
+npm run electron       # Launch Electron with 4096MB heap (run build:main first)
 npm run clean          # Delete dist/
 ```
 
@@ -21,25 +21,25 @@ No test runner or linter is configured.
 Electron + React + TypeScript desktop app for Clinical Research Assistants. Four layers:
 
 **Main Process** (`src/main/`) — Node.js/Electron runtime
-- `index.ts` creates BrowserWindow, registers IPC handlers
+- `index.ts` creates BrowserWindow (1400x900, min 1024x700), registers IPC handlers
 - `config.ts` manages settings via `electron-store` with `electron.safeStorage` encryption. Loads from `.env` → encrypted store → `DEFAULT_CONFIG`
 - `ipc-handlers.ts` registers all `ipcMain.handle()` channels. Holds uploaded file info as module-level in-memory state (`protocolFileInfo`, `subjectFileInfo`)
 - Three agents under `src/main/agents/`:
-  - **gateway/** — AI API calls via `SmartRouter` + adapter pattern (`ZhipuAdapter`, `OpenAIAdapter`). Both use axios with OpenAI-compatible chat completions format. `invokeGateway()` is the public entry point; `resetRouter()` clears the singleton so config changes take effect
+  - **gateway/** — AI API calls via `SmartRouter` + adapter pattern (`ZhipuAdapter`, `OpenAIAdapter`). Both use axios with OpenAI-compatible chat completions format. `invokeGateway()` is the public entry point; `resetRouter()` clears the singleton so config changes take effect. Rate-limited to 5 RPM sliding window, retries up to 5 times on 429. API call logs written to `api-calls-YYYY-MM-DD.log` in Electron userData directory
   - **document/** — PDF/image parsing and data extraction. `pdf-parse` (CJS `require()`) for text extraction, `pdf-to-img` (ESM dynamic `import()`) for scanned PDFs. Three strategies: text-PDF (chunk + AI), scanned-PDF (to-image + AI), image (direct AI)
   - **eligibility/** — Sends criteria + subject data to AI, parses structured pass/fail JSON response
 
 **Renderer** (`src/renderer/`) — Browser/React runtime, `target: 'web'`
-- Single Zustand store (`src/renderer/hooks/useStore.ts`) with `persist` middleware on localStorage key `cra-ai-assistant-storage`. Persists data arrays and settings, not transient UI state
-- Three-panel layout: Sidebar (w-60) | File Panel (w-80) | Worksheet Panel (flex-1)
+- Single Zustand store (`src/renderer/hooks/useStore.ts`) with `persist` middleware on localStorage key `cra-ai-assistant-storage`. Persists: settings, inclusionCriteria, exclusionCriteria, visitSchedule, subjectVisits, medications, subjectDemographics. Does NOT persist: files, processing state, errors, UI state
+- Three-panel layout: Header (h-14) | Sidebar (w-60) | File Panel (w-80) | Worksheet Panel (flex-1)
 - Tailwind CSS with custom `primary` color palette (blue-based)
 - All UI strings are in Chinese
 
 **Shared** (`src/shared/`)
 - `types/` — Two parallel type systems: extraction types (`protocol.ts`, `subject.ts`, `eligibility.ts`) for raw AI output, and worksheet types (`worksheet.ts`) for richer UI representation. `worksheet.ts` is NOT re-exported from `types/index.ts` to avoid name conflicts — import it directly
-- `constants/` — `ipc-channels.ts` (channel names), `app.ts` (version, file constraints, worksheet config), `models.ts` (model definitions)
+- `constants/` — `ipc-channels.ts` (channel names), `app.ts` (version, file constraints, worksheet config), `models.ts` (model definitions, context windows, max images per call)
 
-**Preload** (`src/preload/index.ts`) — `contextBridge` exposes 9 methods as `window.electronAPI`. Note: preload uses hardcoded channel strings instead of importing from shared constants.
+**Preload** (`src/preload/index.ts`) — `contextBridge` exposes 10 methods as `window.electronAPI`. Note: preload uses hardcoded channel strings instead of importing from shared constants.
 
 ## IPC Channels
 
@@ -47,6 +47,7 @@ Electron + React + TypeScript desktop app for Clinical Research Assistants. Four
 |---------|-----------|---------|
 | `GET_SETTINGS` / `SAVE_SETTINGS` | R→M | Config read/write (save also resets gateway router) |
 | `TEST_CONNECTION` | R→M | Sends "请回复连接成功" to AI, returns latency |
+| `OPEN_FILE_DIALOG` | R→M | Opens native file dialog, returns selected file paths |
 | `UPLOAD_PROTOCOL_FILE` / `UPLOAD_SUBJECT_FILE` | R→M | Validate file + detect type (text-pdf/scanned-pdf/image) |
 | `EXTRACT_CRITERIA` / `EXTRACT_SUBJECT_DATA` | R→M | AI extraction from previously uploaded file |
 | `VERIFY_ELIGIBILITY` | R→M | AI eligibility verification (criteria + subject data) |
@@ -60,3 +61,4 @@ Electron + React + TypeScript desktop app for Clinical Research Assistants. Four
 - **Module compatibility**: `pdf-parse` must use `require()`, `pdf-to-img` must use dynamic `import()`
 - **API key handling**: Keys encrypted with `electron.safeStorage`, stored in `electron-store` with additional `encryptionKey`. `.env` file (gitignored) is the primary key source for dev
 - **File processing flow in renderer**: Protocol: upload → extractCriteria → splits into inclusion/exclusion. Subject: upload → extractSubjectData → stores demographics/medications → if criteria exist, runs verifyEligibility
+- **Store rehydration**: Zustand `onRehydrateStorage` revives serialized Date strings back to Date objects and auto-clears stale eligibility results on startup

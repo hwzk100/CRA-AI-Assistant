@@ -23,7 +23,7 @@ export interface ConnectionTestResult {
 export const DEFAULT_CONFIG: AppConfig = {
   apiEndpoint: 'https://open.bigmodel.cn/api/paas/v4/chat/completions',
   apiKey: '',
-  textModel: 'glm-5.1',
+  textModel: 'glm-4.7-flash',
   visionModel: 'glm-4.6v-flash',
   provider: 'zhipu',
 };

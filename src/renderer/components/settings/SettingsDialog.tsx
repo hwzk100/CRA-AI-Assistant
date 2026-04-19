@@ -208,6 +208,7 @@ export const SettingsDialog: React.FC<SettingsDialogProps> = ({ isOpen, onClose 
                       onChange={(e) => setLocalSettings({ ...localSettings, textModel: e.target.value })}
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                     >
+                      <option value="glm-4.7-flash">GLM-4.7-Flash</option>
                       <option value="glm-5.1">GLM-5.1</option>
                       <option value="glm-4">GLM-4</option>
                     </select>

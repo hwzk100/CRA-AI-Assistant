@@ -5,8 +5,8 @@ import {
   CRITERIA_SYSTEM_PROMPT,
   CRITERIA_EXTRACTION_PROMPT,
   CRITERIA_EXTRACTION_FROM_IMAGE_PROMPT,
-  VISIT_SCHEDULE_SYSTEM_PROMPT,
-  VISIT_SCHEDULE_PROMPT,
+  COMBINED_SYSTEM_PROMPT,
+  COMBINED_EXTRACTION_PROMPT,
 } from './prompts/criteria-prompts';
 import type { Criterion, VisitSchedule, ProtocolData } from '../../../shared/types/protocol';
 import { readFileAsBase64 } from '../../utils/file-validator';
@@ -99,6 +99,30 @@ function parseVisitScheduleJson(text: string): { visitSchedules: Array<{ visitNa
   }
 }
 
+function parseCombinedJson(text: string): {
+  inclusionCriteria: Array<{ index: number; content: string }>;
+  exclusionCriteria: Array<{ index: number; content: string }>;
+  visitSchedules: Array<{ visitName: string; timing: string; visitWindow: string; procedures: string[] }>;
+} {
+  const jsonMatch = text.match(/\{[\s\S]*\}/);
+  if (!jsonMatch) {
+    logger.error('No JSON found in combined response');
+    return { inclusionCriteria: [], exclusionCriteria: [], visitSchedules: [] };
+  }
+
+  try {
+    const parsed = JSON.parse(jsonMatch[0]);
+    return {
+      inclusionCriteria: parsed.inclusionCriteria || [],
+      exclusionCriteria: parsed.exclusionCriteria || [],
+      visitSchedules: parsed.visitSchedules || [],
+    };
+  } catch (e) {
+    logger.error('Failed to parse combined JSON', { error: String(e) });
+    return { inclusionCriteria: [], exclusionCriteria: [], visitSchedules: [] };
+  }
+}
+
 export async function extractCriteriaFromTextPdf(
   filePath: string,
   onProgress?: (progress: number, message: string) => void
@@ -127,45 +151,17 @@ export async function extractCriteriaFromTextPdf(
     const progress = 15 + Math.floor((i / criteriaChunks.length) * 70);
     onProgress?.(progress, `正在处理第 ${i + 1}/${criteriaChunks.length} 批...`);
 
-    // Extract criteria from this chunk
-    const criteriaResponse = await invokeGateway({
-      prompt: CRITERIA_EXTRACTION_PROMPT.replace('{text}', chunk),
-      systemPrompt: CRITERIA_SYSTEM_PROMPT,
+    // Extract criteria + visit schedules in a single API call
+    const combinedResponse = await invokeGateway({
+      prompt: COMBINED_EXTRACTION_PROMPT.replace('{text}', chunk),
+      systemPrompt: COMBINED_SYSTEM_PROMPT,
       contentType: 'text',
     });
 
-    const criteriaJson = parseCriteriaJson(criteriaResponse.content);
-    allInclusion.push(...criteriaJson.inclusionCriteria);
-    allExclusion.push(...criteriaJson.exclusionCriteria);
-
-    // Extract visit schedules from this chunk
-    const visitResponse = await invokeGateway({
-      prompt: VISIT_SCHEDULE_PROMPT.replace('{text}', chunk),
-      systemPrompt: VISIT_SCHEDULE_SYSTEM_PROMPT,
-      contentType: 'text',
-    });
-
-    const visitJson = parseVisitScheduleJson(visitResponse.content);
-    allVisits.push(...visitJson.visitSchedules);
-  }
-
-  // If criteria pre-filter found nothing, also check visit-only keywords on remaining chunks
-  if (allVisits.length === 0) {
-    const { filtered: visitChunks } = filterRelevantChunks(chunks, VISIT_KEYWORDS);
-    const unprocessedChunks = visitChunks.filter(
-      (vc) => !criteriaChunks.includes(vc)
-    );
-
-    for (const chunk of unprocessedChunks) {
-      const visitResponse = await invokeGateway({
-        prompt: VISIT_SCHEDULE_PROMPT.replace('{text}', chunk),
-        systemPrompt: VISIT_SCHEDULE_SYSTEM_PROMPT,
-        contentType: 'text',
-      });
-
-      const visitJson = parseVisitScheduleJson(visitResponse.content);
-      allVisits.push(...visitJson.visitSchedules);
-    }
+    const combinedJson = parseCombinedJson(combinedResponse.content);
+    allInclusion.push(...combinedJson.inclusionCriteria);
+    allExclusion.push(...combinedJson.exclusionCriteria);
+    allVisits.push(...combinedJson.visitSchedules);
   }
 
   // Deduplicate criteria (similarity check by content equality)

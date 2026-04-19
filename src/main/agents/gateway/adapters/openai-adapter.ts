@@ -1,6 +1,7 @@
 import axios from 'axios';
 import { BaseAdapter } from './base-adapter';
 import type { GatewayResponse, AdapterConfig } from '../../../../shared/types/gateway';
+import { MODEL_SPECS, DEFAULT_MODEL_SPEC } from '../../../../shared/constants/models';
 import { createLogger } from '../../../utils/logger';
 
 const logger = createLogger('OpenAIAdapter');
@@ -38,6 +39,11 @@ export class OpenAIAdapter extends BaseAdapter {
     this.config = config;
   }
 
+  private resolveMaxTokens(explicitMaxTokens: number | undefined, model: string): number {
+    if (explicitMaxTokens !== undefined) return explicitMaxTokens;
+    return MODEL_SPECS[model]?.maxOutputTokens ?? DEFAULT_MODEL_SPEC.maxOutputTokens;
+  }
+
   async chat(
     prompt: string,
     systemPrompt?: string,
@@ -57,14 +63,14 @@ export class OpenAIAdapter extends BaseAdapter {
         model: this.config.textModel,
         messages,
         temperature: options?.temperature ?? 0.1,
-        max_tokens: options?.maxTokens ?? 4096,
+        max_tokens: this.resolveMaxTokens(options?.maxTokens, this.config.textModel),
       },
       {
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${this.config.apiKey}`,
         },
-        timeout: 120000,
+        timeout: 180000,
       }
     );
 
@@ -77,6 +83,7 @@ export class OpenAIAdapter extends BaseAdapter {
         completionTokens: data.usage?.completion_tokens || 0,
         totalTokens: data.usage?.total_tokens || 0,
       },
+      rawResponse: data,
     };
   }
 
@@ -124,7 +131,7 @@ export class OpenAIAdapter extends BaseAdapter {
         model: this.config.visionModel,
         messages,
         temperature: options?.temperature ?? 0.1,
-        max_tokens: options?.maxTokens ?? 4096,
+        max_tokens: this.resolveMaxTokens(options?.maxTokens, this.config.visionModel),
       },
       {
         headers: {
@@ -144,6 +151,7 @@ export class OpenAIAdapter extends BaseAdapter {
         completionTokens: data.usage?.completion_tokens || 0,
         totalTokens: data.usage?.total_tokens || 0,
       },
+      rawResponse: data,
     };
   }
 }

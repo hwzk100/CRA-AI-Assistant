@@ -22,6 +22,7 @@ export interface GatewayResponse {
     completionTokens: number;
     totalTokens: number;
   };
+  rawResponse?: unknown;
 }
 
 export interface AdapterConfig {
