@@ -33,7 +33,8 @@ function App(): React.ReactElement {
   // Listen for progress events
   useEffect(() => {
     const cleanup = window.electronAPI.onProcessingProgress((progress: any) => {
-      setProcessing(true, progress.stage, progress.progress);
+      const isDone = progress.stage === 'error' || progress.stage === 'complete';
+      setProcessing(!isDone, progress.stage, progress.progress);
       if (progress.stage === 'error') {
         setError(progress.message);
       }

@@ -1,6 +1,7 @@
 import { invokeGateway, getChunkTokens, getMaxImagesPerCall } from '../gateway/index';
 import { parsePdf, splitTextIntoChunks, clearPdfCache } from './pdf-parser';
 import { convertPdfToImages } from './pdf-to-image';
+import { extractRelevantSections } from './section-locator';
 import {
   CRITERIA_SYSTEM_PROMPT,
   CRITERIA_EXTRACTION_PROMPT,
@@ -129,27 +130,47 @@ export async function extractCriteriaFromTextPdf(
 ): Promise<ProtocolData> {
   const parseResult = await parsePdf(filePath);
   const chunkTokens = getChunkTokens();
-  const chunks = splitTextIntoChunks(parseResult.text, chunkTokens, Math.floor(chunkTokens * 0.1));
 
   logger.info(`Using chunk size ${chunkTokens} tokens for text model`);
+  onProgress?.(10, '正在分析文档结构...');
 
-  logger.info(`Total chunks: ${chunks.length}, filtering for relevant content...`);
-  onProgress?.(10, `PDF文本已解析（${chunks.length} 个分块），正在筛选相关内容...`);
+  // Try section-based extraction first
+  const sectionResult = extractRelevantSections(parseResult.text, [
+    'inclusion', 'exclusion', 'visit-schedule',
+  ]);
 
-  // Pre-filter: only process chunks likely containing criteria or visit schedules
-  const { filtered: criteriaChunks } = filterRelevantChunks(chunks, [...CRITERIA_KEYWORDS, ...VISIT_KEYWORDS]);
+  let chunks: string[];
 
-  logger.info(`Filtered to ${criteriaChunks.length} relevant chunks (from ${chunks.length} total)`);
-  onProgress?.(15, `筛选出 ${criteriaChunks.length} 个相关分块，开始AI提取...`);
+  if (sectionResult.success) {
+    logger.info(`Section-based extraction: found ${sectionResult.sections.length} sections, ${sectionResult.totalLength} chars`);
+    onProgress?.(15, `已定位 ${sectionResult.sections.length} 个相关章节，开始AI提取...`);
+
+    // Section text may still exceed chunk size — split if needed
+    chunks = splitTextIntoChunks(sectionResult.combinedText, chunkTokens, Math.floor(chunkTokens * 0.1));
+  } else {
+    // Fallback: existing full-text chunking + keyword filtering
+    logger.info(`Section detection failed (${sectionResult.fallbackReason}), falling back to chunking`);
+    const allChunks = splitTextIntoChunks(parseResult.text, chunkTokens, Math.floor(chunkTokens * 0.1));
+
+    logger.info(`Total chunks: ${allChunks.length}, filtering for relevant content...`);
+    onProgress?.(10, `PDF文本已解析（${allChunks.length} 个分块），正在筛选相关内容...`);
+
+    const { filtered: criteriaChunks } = filterRelevantChunks(allChunks, [...CRITERIA_KEYWORDS, ...VISIT_KEYWORDS]);
+
+    logger.info(`Filtered to ${criteriaChunks.length} relevant chunks (from ${allChunks.length} total)`);
+    onProgress?.(15, `筛选出 ${criteriaChunks.length} 个相关分块，开始AI提取...`);
+
+    chunks = criteriaChunks;
+  }
 
   let allInclusion: Array<{ index: number; content: string }> = [];
   let allExclusion: Array<{ index: number; content: string }> = [];
   let allVisits: Array<{ visitName: string; timing: string; visitWindow: string; procedures: string[] }> = [];
 
-  for (let i = 0; i < criteriaChunks.length; i++) {
-    const chunk = criteriaChunks[i];
-    const progress = 15 + Math.floor((i / criteriaChunks.length) * 70);
-    onProgress?.(progress, `正在处理第 ${i + 1}/${criteriaChunks.length} 批...`);
+  for (let i = 0; i < chunks.length; i++) {
+    const chunk = chunks[i];
+    const progress = 15 + Math.floor((i / chunks.length) * 70);
+    onProgress?.(progress, `正在处理第 ${i + 1}/${chunks.length} 批...`);
 
     // Extract criteria + visit schedules in a single API call
     const combinedResponse = await invokeGateway({

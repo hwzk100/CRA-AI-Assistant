@@ -9,7 +9,7 @@ import type { WorksheetType, FileFilter } from '../types/worksheet';
 // ============================================================================
 
 export const APP_NAME = 'CRA AI Assistant';
-export const APP_VERSION = '4.0.3';
+export const APP_VERSION = '5.0.1';
 
 // ============================================================================
 // File Constraints

@@ -14,6 +14,7 @@ import type {
   MedicationRecord,
   WorksheetType,
   FileStatus,
+  DocumentCategory,
   SubjectDemographics,
   InclusionFileResult,
   ExclusionFileResult,
@@ -62,7 +63,7 @@ interface AppActions {
   setSubjectFiles: (files: FileInfo[]) => void;
   addFile: (zone: StorageZone, file: FileInfo) => void;
   removeFile: (zone: StorageZone, fileId: string) => void;
-  updateFileStatus: (zone: StorageZone, fileId: string, status: FileStatus, errorMessage?: string) => void;
+  updateFileStatus: (zone: StorageZone, fileId: string, status: FileStatus, errorMessage?: string, documentCategory?: DocumentCategory) => void;
 
   // Worksheet Actions
   setActiveWorksheet: (worksheet: WorksheetType) => void;
@@ -170,13 +171,14 @@ const useAppStore = create<AppStore>()(
           return { subjectFiles: state.subjectFiles.filter((f) => f.id !== fileId) };
         }),
 
-      updateFileStatus: (zone, fileId, status, errorMessage) =>
+      updateFileStatus: (zone, fileId, status, errorMessage, documentCategory) =>
         set((state) => {
           const updateFile = (file: FileInfo): FileInfo => ({
             ...file,
             status,
             ...(status === 'completed' && { processedAt: new Date() }),
             ...(errorMessage && { errorMessage }),
+            ...(documentCategory && { documentCategory }),
           });
 
           if (zone === StorageZone.PROTOCOL) {

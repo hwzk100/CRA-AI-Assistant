@@ -5,7 +5,7 @@
 
 import React, { useCallback, useState } from 'react';
 import { useStore } from '../../hooks/useStore';
-import { StorageZone, FileType, FileStatus } from '@shared/types/worksheet';
+import { StorageZone, FileType, FileStatus, type DocumentCategory } from '@shared/types/worksheet';
 import { generateId } from '@shared/types/worksheet';
 
 interface FileZoneProps {
@@ -178,6 +178,10 @@ export const FileZone: React.FC<FileZoneProps> = ({
         console.log('[FileZone] Subject extraction result:', subjectResult ? 'received' : 'null');
         if (subjectResult && subjectResult.subjectData) {
           const data = subjectResult.subjectData;
+
+          // Store document category for later use when marking completed
+          (fileInfo as any).__docCategory = subjectResult.documentCategory;
+
           const { addSubjectDemographics, setMedications } = useStore.getState();
 
           // Store demographics
@@ -252,7 +256,7 @@ export const FileZone: React.FC<FileZoneProps> = ({
       }
 
       console.log('[FileZone] File processing completed:', fileId);
-      updateFileStatus(zone, fileId, FileStatus.COMPLETED);
+      updateFileStatus(zone, fileId, FileStatus.COMPLETED, undefined, (fileInfo as any).__docCategory);
       return true;
     } catch (error) {
       const errMsg = error instanceof Error ? error.message : String(error);
@@ -300,6 +304,32 @@ export const FileZone: React.FC<FileZoneProps> = ({
         return '失败';
       default:
         return '未知';
+    }
+  };
+
+  const getCategoryColor = (category: DocumentCategory): string => {
+    switch (category) {
+      case 'medical-record':
+        return 'bg-blue-100 text-blue-700';
+      case 'lab-report':
+        return 'bg-green-100 text-green-700';
+      case 'drug-inventory':
+        return 'bg-amber-100 text-amber-700';
+      default:
+        return 'bg-gray-100 text-gray-600';
+    }
+  };
+
+  const getCategoryText = (category: DocumentCategory): string => {
+    switch (category) {
+      case 'medical-record':
+        return '病历';
+      case 'lab-report':
+        return '化验单';
+      case 'drug-inventory':
+        return '药物表';
+      default:
+        return '其他';
     }
   };
 
@@ -472,6 +502,11 @@ export const FileZone: React.FC<FileZoneProps> = ({
                   </div>
                 </div>
                 <div className="flex items-center space-x-2 flex-shrink-0">
+                  {zone === StorageZone.SUBJECT && file.documentCategory && (
+                    <span className={`text-xs px-2 py-1 rounded-full font-medium ${getCategoryColor(file.documentCategory)}`}>
+                      {getCategoryText(file.documentCategory)}
+                    </span>
+                  )}
                   <span className={`text-xs px-2 py-1 rounded-full font-medium ${getStatusColor(file.status)}`}>
                     {getStatusText(file.status)}
                   </span>

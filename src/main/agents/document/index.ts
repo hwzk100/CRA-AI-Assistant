@@ -1,6 +1,8 @@
 import { detectFileType, type DetectedFileType } from './file-handler';
 import { extractCriteriaFromTextPdf, extractCriteriaFromScannedPdf, extractCriteriaFromImage } from './criteria-extractor';
 import { extractSubjectFromTextPdf, extractSubjectFromScannedPdf, extractSubjectFromImage } from './subject-extractor';
+import type { SubjectExtractionResult } from './subject-extractor';
+import type { DocumentCategory } from './prompts/classification-prompts';
 import type { ProtocolData } from '../../../shared/types/protocol';
 import type { SubjectData } from '../../../shared/types/subject';
 import type { FileUploadResult } from '../../../shared/types/ipc';
@@ -69,7 +71,7 @@ export async function extractSubjectData(
   detectedFileType: DetectedFileType,
   mimeType: string,
   onProgress?: (progress: number, message: string) => void
-): Promise<SubjectData> {
+): Promise<SubjectExtractionResult> {
   onProgress?.(0, '开始提取受试者数据...');
 
   switch (detectedFileType) {

@@ -1,5 +1,7 @@
+export type DocumentCategory = 'medical-record' | 'lab-report' | 'drug-inventory' | 'other';
+
 export interface ProcessingProgress {
-  stage: 'uploading' | 'parsing' | 'extracting' | 'verifying' | 'complete' | 'error';
+  stage: 'uploading' | 'parsing' | 'classifying' | 'extracting' | 'verifying' | 'complete' | 'error';
   progress: number; // 0-100
   message: string;
 }

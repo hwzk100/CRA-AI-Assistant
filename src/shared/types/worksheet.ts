@@ -31,6 +31,8 @@ export enum FileType {
   UNKNOWN = 'unknown',
 }
 
+export type DocumentCategory = 'medical-record' | 'lab-report' | 'drug-inventory' | 'other';
+
 export interface FileInfo {
   id: string;
   name: string;
@@ -41,6 +43,7 @@ export interface FileInfo {
   uploadedAt: Date;
   processedAt?: Date;
   errorMessage?: string;
+  documentCategory?: DocumentCategory;
 }
 
 // ============================================================================

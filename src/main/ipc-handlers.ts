@@ -172,17 +172,19 @@ export function registerIpcHandlers(): void {
 
     try {
       sendProgress({ stage: 'extracting', progress: 0, message: '开始提取受试者数据...' });
-      const data = await extractSubjectData(
+      const result = await extractSubjectData(
         subjectFileInfo.filePath,
         subjectFileInfo.fileType,
         subjectFileInfo.mimeType,
         (progress, message) => {
-          sendProgress({ stage: 'extracting', progress, message });
+          // Map 'classifying' progress from extractor to IPC progress
+          const stage = message.includes('分类') ? 'classifying' as const : 'extracting' as const;
+          sendProgress({ stage, progress, message });
         }
       );
 
       sendProgress({ stage: 'complete', progress: 100, message: '受试者数据提取完成' });
-      return data;
+      return result;
     } catch (error) {
       const errMsg = error instanceof Error ? error.message : String(error);
       logger.error('Extract subject data failed', { error: errMsg });

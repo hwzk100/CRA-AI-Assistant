@@ -8,7 +8,9 @@ import fs from 'fs';
 const logger = createLogger('GatewayAgent');
 
 const MAX_RETRIES = 5;
-const BASE_DELAY_MS = 10000;
+const BASE_DELAY_MS = 10000;               // 超时/网络错误退避基数
+const RATE_LIMIT_BASE_DELAY_MS = 3000;     // 429 退避基数
+const RATE_LIMIT_MAX_DELAY_MS = 30000;     // 429 退避上限
 const MIN_CALL_INTERVAL_MS = 1500; // Minimum gap between consecutive API calls
 const RATE_LIMIT_RPM = 5; // Max calls per sliding window
 const RATE_WINDOW_MS = 60_000; // 60-second sliding window
@@ -147,7 +149,6 @@ export async function invokeGateway(request: GatewayRequest): Promise<GatewayRes
   }
 
   lastCallTime = Date.now();
-  callTimestamps.push(lastCallTime);
 
   logger.info('Invoking gateway', {
     model,
@@ -185,12 +186,18 @@ export async function invokeGateway(request: GatewayRequest): Promise<GatewayRes
       ].join('\n');
       appendApiLog(logEntry);
 
+      callTimestamps.push(lastCallTime);
       return { ...response, content: cleanedContent };
     } catch (error: unknown) {
       lastError = error;
       if (isRetryableError(error) && attempt < MAX_RETRIES) {
         const retryAfter = getRetryAfterMs(error);
-        const delay = retryAfter ?? BASE_DELAY_MS * Math.pow(2, attempt);
+        let delay: number;
+        if (isRateLimitError(error)) {
+          delay = retryAfter ?? Math.min(RATE_LIMIT_BASE_DELAY_MS * Math.pow(2, attempt), RATE_LIMIT_MAX_DELAY_MS);
+        } else {
+          delay = BASE_DELAY_MS * Math.pow(2, attempt);
+        }
         const reason = isRateLimitError(error) ? 'Rate limited (429)' : 'Timeout/network error';
         logger.warn(`${reason}, retrying in ${delay}ms (attempt ${attempt + 1}/${MAX_RETRIES})`);
         appendApiLog([
